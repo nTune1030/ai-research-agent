@@ -1,0 +1,4 @@
+ollama
+streamlit
+bs4
+# Add other libraries you import here, e.g., pandas, requests
