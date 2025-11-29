@@ -74,7 +74,7 @@ def main():
         data = json.loads(json_string)
         
         # Save to your D: drive
-        filename = f"D:/AI_Workstation/projects/news_{datetime.now().strftime('%Y%m%d')}.json"
+        filename = f"news_{datetime.now().strftime('%Y%m%d')}.json"
         
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)
