@@ -1,0 +1,21 @@
+# Python junk
+__pycache__/
+*.pyc
+
+# Virtual Environments (if you ever use them)
+.venv/
+venv/
+
+# AI Models (NEVER upload these to GitHub)
+*.gguf
+*.bin
+*.pt
+models/
+ollama_models/
+
+# Environment Variables (Protect your secrets!)
+.env
+
+# IDE settings
+.vscode/
+.idea/
