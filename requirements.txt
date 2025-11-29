@@ -1,4 +1,5 @@
 ollama
 streamlit
-bs4
+beautifulsoup4
+requests
 # Add other libraries you import here, e.g., pandas, requests
