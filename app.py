@@ -71,7 +71,7 @@ with st.sidebar:
 
     st.divider()
     # Debug info to confirm data is actually loaded
-    st.caption(f"Context in Memory: {len(st.session_state.context_text)} chars")
+    # st.caption(f"Context in Memory: {len(st.session_state.context_text)} chars")
 
 # --- 5. MAIN CHAT ---
 st.title("AI Research Assistant")
