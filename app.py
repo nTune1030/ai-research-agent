@@ -42,7 +42,7 @@ def fetch_webpage_data(url):
             script.extract()
         
         return {
-            "text": soup.get_text(separator=' ')[:20000],
+            "text": soup.get_text(separator=' ')[:100000], # Changed character limit from 20000
             "links": links,
             "files": files,
             "error": None
@@ -57,7 +57,7 @@ def extract_pdf_text(uploaded_file):
         with pdfplumber.open(uploaded_file) as pdf:
             for page in pdf.pages:
                 text += (page.extract_text() or "") + "\n"
-        return {"text": text[:20000], "error": None}
+        return {"text": text[:100000], "error": None} # Changed character limit from 20000
     except Exception as e:
         return {"error": str(e)}
 
