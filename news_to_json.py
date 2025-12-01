@@ -3,23 +3,22 @@ import requests
 from bs4 import BeautifulSoup
 import ollama
 from datetime import datetime
+import os
 
 # URL to scrape
 URL = "https://www.npr.org/"
 
 def fetch_clean_text(url):
-    """(Same scraping logic as before)"""
     try:
         response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Aggressive cleaning to fit more content in context
         for tag in soup(["script", "style", "nav", "footer", "header", "form"]):
             tag.extract()
             
         text = soup.get_text(separator=' ')
-        # Collapse whitespace
-        return ' '.join(text.split())[:15000] 
+        # INCREASED LIMIT: 50k chars for broader news coverage
+        return ' '.join(text.split())[:50000] 
     except Exception as e:
         print(f"Error: {e}")
         return ""
@@ -27,7 +26,6 @@ def fetch_clean_text(url):
 def extract_structured_data(text):
     print("⏳ AI is extracting structured data...")
     
-    # The Prompt: We explicitly demand a JSON array
     prompt = f"""
     You are a data extraction engine. 
     Read the text below and extract the top 5 news stories.
@@ -50,9 +48,12 @@ def extract_structured_data(text):
     {text}
     """
     
-    response = ollama.chat(model='llama3.2', messages=[
-        {'role': 'user', 'content': prompt}
-    ])
+    # UPDATED: Using Llama 3.1 + 16k Context
+    response = ollama.chat(
+        model='llama3.1', 
+        messages=[{'role': 'user', 'content': prompt}],
+        options={'num_ctx': 16384}
+    )
     
     return response['message']['content']
 
@@ -63,18 +64,15 @@ def main():
     if not raw_text:
         return
 
-    # Get the raw string from AI
     json_string = extract_structured_data(raw_text)
-    
-    # Clean up AI output (sometimes it adds ```json fences)
     json_string = json_string.replace("```json", "").replace("```", "").strip()
 
     try:
-        # Parse it into a real Python Dictionary
         data = json.loads(json_string)
         
-        # Save to your D: drive
-        filename = f"news_{datetime.now().strftime('%Y%m%d')}.json"
+        # Relative path fix (already applied previously, keeping it safe)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        filename = os.path.join(script_dir, f"news_{datetime.now().strftime('%Y%m%d')}.json")
         
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)

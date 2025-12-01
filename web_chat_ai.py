@@ -25,7 +25,8 @@ def fetch_webpage_text(url: str) -> str:
         lines = (line.strip() for line in text.splitlines())
         clean_text = '\n'.join(line for line in lines if line)
         
-        return clean_text[:12000] # Increased buffer for conversation
+        # INCREASED LIMIT: 100k chars to match your 32k token memory
+        return clean_text[:100000] 
         
     except Exception as e:
         print(f"❌ Error fetching URL: {e}")
@@ -37,7 +38,6 @@ def chat_loop(context_text: str):
     print("\n✅ content loaded! You can now ask questions about this website.")
     print("Type 'exit' or 'quit' to stop.\n")
     
-    # We prime the AI with the data ONCE in the system prompt
     system_prompt = f"""
     You are a helpful research assistant. 
     Answer the user's questions strictly based on the provided WEBSITE CONTENT below.
@@ -47,7 +47,6 @@ def chat_loop(context_text: str):
     {context_text}
     """
     
-    # We keep a simple history so it remembers previous questions in this session
     messages = [{'role': 'system', 'content': system_prompt}]
 
     while True:
@@ -56,15 +55,17 @@ def chat_loop(context_text: str):
             print("👋 Exiting chat.")
             break
             
-        # Add user's question to history
         messages.append({'role': 'user', 'content': user_input})
         
-        # Generate response
         print("🤖 Thinking...")
-        response = ollama.chat(model='llama3.2', messages=messages)
+        # UPDATED: Using Llama 3.1 + 32k Context
+        response = ollama.chat(
+            model='llama3.1', 
+            messages=messages,
+            options={'num_ctx': 32768}
+        )
         ai_reply = response['message']['content']
         
-        # Print and save to history (so it remembers the context of the chat)
         print(f"\nAI: {ai_reply}\n")
         messages.append({'role': 'assistant', 'content': ai_reply})
 
