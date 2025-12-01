@@ -134,7 +134,7 @@ if prompt := st.chat_input("Ask a question..."):
                 model='llama3.1',  # <--- CHANGED to 3.1 (Smart 8B Model)
                 messages=api_messages,
                 options={
-                    'num_ctx': 32768,  # Max memory for 8GB GPU
+                    'num_ctx': 20480,  # Max memory for 8GB GPU
                     'temperature': 0.7 
                 }
             )
