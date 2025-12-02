@@ -1,3 +1,34 @@
+"""
+AI Research Agent - Local Autonomous Browser & PDF Analyst
+----------------------------------------------------------
+A Streamlit-based interface that turns a local LLM into an internet-connected research assistant.
+It allows users to scrape websites, read PDFs, and autonomously navigate between links.
+
+HARDWARE & CONFIGURATION TWEAKS (Optimized for RTX 5050 / 8GB VRAM):
+--------------------------------------------------------------------
+1. Model: Llama 3.1 (8B)
+   - Chosen over Llama 3.2 (3B) for superior reasoning and instruction following.
+   - Fits comfortably in VRAM when quantized (Q4_K_M).
+
+2. Context Window (num_ctx): 20,480 Tokens
+   - The theoretical max for Llama 3.1 is 128k, but that requires 24GB+ VRAM.
+   - We initially tried 32k (32768), but it caused OOM (Exit Code 2) crashes on 8GB VRAM.
+   - 20k is the "Sweet Spot": Maximize document reading capacity without crashing the GPU.
+
+3. Input Truncation: 100,000 Characters
+   - We limit scraped text to ~100k chars to roughly align with the 20k token limit.
+   - Prevents context overflow and processing lag.
+
+4. GPU Acceleration:
+   - Requires `OLLAMA_FLASH_ATTENTION=1` in the launch environment (set in .bat).
+   - Offloads 29/29 layers to the GPU for maximum inference speed.
+
+FEATURES:
+- Autonomous Navigation: The AI can output JSON commands (`{"action": "navigate"...}`) to click links.
+- PDF Analysis: Uses `pdfplumber` for safe text extraction.
+- Link Injection: Feeds the top 50 discovered links into the context for the AI to "see".
+"""
+
 import streamlit as st
 import ollama
 import requests
