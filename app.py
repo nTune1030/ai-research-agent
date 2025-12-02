@@ -173,7 +173,7 @@ if prompt := st.chat_input("Ask a question or say 'Go to [Link Name]'..."):
                 model='llama3.1', 
                 messages=api_messages,
                 options={
-                    'num_ctx': 32768, 
+                    'num_ctx': 20480, # Safer memory load for GPU
                     'temperature': 0.7 
                 }
             )
