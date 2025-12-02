@@ -2,6 +2,7 @@ import streamlit as st
 import ollama
 import requests
 import pdfplumber
+import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
@@ -15,7 +16,10 @@ def fetch_webpage_data(url):
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+        # Less CPU
+        soup = BeautifulSoup(response.text, 'lxml')
+        # Heavy CPU usuage
+        # soup = BeautifulSoup(response.text, 'html.parser')
         
         # --- Link Extraction ---
         links = []
@@ -42,7 +46,7 @@ def fetch_webpage_data(url):
             script.extract()
         
         return {
-            "text": soup.get_text(separator=' ')[:100000], # Changed character limit from 20000
+            "text": soup.get_text(separator=' ')[:100000],
             "links": links,
             "files": files,
             "error": None
@@ -57,7 +61,7 @@ def extract_pdf_text(uploaded_file):
         with pdfplumber.open(uploaded_file) as pdf:
             for page in pdf.pages:
                 text += (page.extract_text() or "") + "\n"
-        return {"text": text[:100000], "error": None} # Changed character limit from 20000
+        return {"text": text[:100000], "error": None}
     except Exception as e:
         return {"error": str(e)}
 
@@ -68,23 +72,36 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "found_files" not in st.session_state:
     st.session_state.found_files = []
+if "found_links" not in st.session_state:
+    st.session_state.found_links = []
+if "current_url" not in st.session_state:
+    st.session_state.current_url = ""
 
 with st.sidebar:
     st.header("🕵️ Data Source")
     mode = st.radio("Input Type:", ["🌐 Website URL", "📄 Upload PDF"])
     
+    # --- HELPER: Function to load data and update UI ---
+    def load_new_url(target_url):
+        with st.spinner(f"Navigating to: {target_url}..."):
+            data = fetch_webpage_data(target_url)
+            if data.get("error"):
+                st.error(data["error"])
+                return False
+            else:
+                st.session_state.context_text = data["text"]
+                st.session_state.found_files = data["files"]
+                st.session_state.found_links = data["links"]
+                st.session_state.current_url = target_url
+                # Add a system note to chat history so the user knows what happened
+                st.session_state.messages.append({"role": "assistant", "content": f"✅ **Navigation Successful!** I have loaded the new page: {target_url}"})
+                return True
+
     if mode == "🌐 Website URL":
-        url = st.text_input("Enter URL:")
+        url = st.text_input("Enter URL:", value=st.session_state.current_url)
         if st.button("Load Website") and url:
-            with st.spinner("Scraping..."):
-                data = fetch_webpage_data(url)
-                if data.get("error"):
-                    st.error(data["error"])
-                else:
-                    st.session_state.context_text = data["text"]
-                    st.session_state.found_files = data["files"] # Save files
-                    st.session_state.messages = []
-                    st.success("Website Loaded!")
+            if load_new_url(url):
+                st.success("Website Loaded!")
                     
     elif mode == "📄 Upload PDF":
         pdf_file = st.file_uploader("Upload PDF", type="pdf")
@@ -95,11 +112,12 @@ with st.sidebar:
                     st.error(data["error"])
                 else:
                     st.session_state.context_text = data["text"]
-                    st.session_state.found_files = [] # Clear files for PDF mode
+                    st.session_state.found_files = []
+                    st.session_state.found_links = []
+                    st.session_state.current_url = "PDF Upload"
                     st.session_state.messages = []
                     st.success("PDF Loaded!")
 
-    # Show Files found (Only for Website mode)
     if st.session_state.found_files:
         st.divider()
         st.subheader("📂 Found Files")
@@ -107,7 +125,7 @@ with st.sidebar:
             st.markdown(f"[{f['text']}]({f['url']})")
 
 # --- 4. CHAT ---
-st.title("AI Research Assistant")
+st.title("AI Research Agent")
 
 if not st.session_state.context_text:
     st.info("👈 Please load a data source.")
@@ -117,30 +135,71 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-if prompt := st.chat_input("Ask a question..."):
+if prompt := st.chat_input("Ask a question or say 'Go to [Link Name]'..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    system_prompt = f"Answer strictly based on:\n{st.session_state.context_text}"
+    # --- MAGIC: Prepare Links for the AI Brain ---
+    # We take the top 50 links and format them so the AI can "read" them
+    links_context = ""
+    if st.session_state.found_links:
+        links_context = "\n\nAVAILABLE LINKS ON THIS PAGE:\n"
+        for i, link in enumerate(st.session_state.found_links[:50]): # Limit to top 50 to save context
+            links_context += f"- {link['text']}: {link['url']}\n"
+
+    system_prompt = f"""
+    You are a helpful research assistant.
+    Answer strictly based on the provided text.
+    
+    IMPORTANT: You have the ability to navigate the web.
+    If the user asks to "follow", "click", or "go to" a specific link found in the content below,
+    reply with EXACTLY this JSON format and nothing else:
+    {{ "action": "navigate", "url": "THE_URL_HERE" }}
+
+    TEXT DATA:
+    {st.session_state.context_text}
+
+    {links_context}
+    """
     
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             # 1. Define message history
             api_messages = [{'role': 'system', 'content': system_prompt}] + st.session_state.messages
             
-            # 2. Call Ollama with SMARTER model + MAX memory
+            # 2. Call Ollama
             response = ollama.chat(
-                model='llama3.1',  # <--- CHANGED to 3.1 (Smart 8B Model)
+                model='llama3.1', 
                 messages=api_messages,
                 options={
-                    'num_ctx': 20480,  # Max memory for 8GB GPU
+                    'num_ctx': 32768, 
                     'temperature': 0.7 
                 }
             )
             
-            # 3. Display result
             ai_reply = response['message']['content']
-            st.markdown(ai_reply)
+
+            # --- 3. CHECK FOR NAVIGATION COMMAND ---
+            # We look for the special JSON trigger
+            if '{ "action": "navigate"' in ai_reply or '{"action": "navigate"' in ai_reply:
+                try:
+                    # Extract the URL using regex to be safe
+                    url_match = re.search(r'"url":\s*"([^"]+)"', ai_reply)
+                    if url_match:
+                        target_url = url_match.group(1)
+                        st.markdown(f"🔄 **Navigating to:** `{target_url}`...")
+                        
+                        # EXECUTE NAVIGATION
+                        if load_new_url(target_url):
+                            st.rerun() # Restart the app to show new data
+                    else:
+                        st.error("AI tried to navigate but the URL was broken.")
+                except Exception as e:
+                    st.error(f"Navigation failed: {e}")
+            else:
+                # Normal Text Reply
+                st.markdown(ai_reply)
             
-    st.session_state.messages.append({"role": "assistant", "content": ai_reply})
+    if not ('{ "action": "navigate"' in ai_reply):
+        st.session_state.messages.append({"role": "assistant", "content": ai_reply})
